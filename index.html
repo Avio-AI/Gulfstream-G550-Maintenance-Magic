@@ -35,20 +35,7 @@
     overflow: hidden;
   }
 
-  /* ── SCANLINE OVERLAY ── */
-  body::before {
-    content: '';
-    position: fixed; inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0,0,0,.18) 2px,
-      rgba(0,0,0,.18) 4px
-    );
-    pointer-events: none;
-    z-index: 9999;
-  }
+  /* scanline overlay removed for font clarity */
 
   /* ── LAYOUT ── */
   #app {
