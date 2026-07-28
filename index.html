@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>G550 FUEL SYS — TROUBLESHOOTER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #080b0f;
+    --surface:   #0d1219;
+    --panel:     #111820;
+    --border:    #1e2d3d;
+    --amber:     #e8a020;
+    --amber-dim: #7a4f08;
+    --amber-glow:#ffc84a;
+    --cyan:      #00d4e8;
+    --cyan-dim:  #004d54;
+    --red:       #e83030;
+    --green:     #20c870;
+    --text:      #c8d8e8;
+    --text-dim:  #5a7080;
+    --mono:      'Share Tech Mono', monospace;
+    --sans:      'Lato', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow: hidden;
+  }
+
+  /* ── SCANLINE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,.18) 2px,
+      rgba(0,0,0,.18) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── LAYOUT ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-width: 430px;
+    margin: 0 auto;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+
+  /* ── HEADER ── */
+  header {
+    flex-shrink: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--amber), var(--cyan), var(--amber));
+    animation: sweep 4s linear infinite;
+    background-size: 200% 100%;
+  }
+  @keyframes sweep {
+    0%   { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .acft-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--amber);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity:1; } 50% { opacity:.4; }
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--amber-glow);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 0 12px rgba(232,160,32,.4);
+  }
+  .header-sub {
+    display: flex;
+    gap: 12px;
+    margin-top: 6px;
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .badge.live { color: var(--cyan); border-color: var(--cyan-dim); }
+
+  /* ── SYSTEM STATUS BAR ── */
+  .status-bar {
+    flex-shrink: 0;
+    display: flex;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 0 8px;
+    gap: 2px;
+  }
+  .status-bar::-webkit-scrollbar { display: none; }
+  .sys-item {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 10px;
+    border-right: 1px solid var(--border);
+    min-width: 70px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .sys-item:last-child { border-right: none; }
+  .sys-item:active { background: rgba(232,160,32,.08); }
+  .sys-item.active { background: rgba(232,160,32,.1); }
+  .sys-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+  .sys-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--amber);
+  }
+  .sys-item.active .sys-value { color: var(--amber-glow); }
+  .sys-value.ok  { color: var(--green); }
+  .sys-value.warn{ color: var(--amber); }
+  .sys-value.fail{ color: var(--red); animation: blink .8s step-start infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  /* ── CHAT AREA ── */
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 12px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  #chat::-webkit-scrollbar { width: 3px; }
+  #chat::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* ── MESSAGES ── */
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    animation: fadeUp .3s ease;
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(8px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+  .msg-role {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .msg.user .msg-role  { color: var(--cyan); align-self: flex-end; }
+  .msg.ai   .msg-role  { color: var(--amber); }
+
+  .msg-bubble {
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 16px;
+    line-height: 1.55;
+    max-width: 92%;
+    position: relative;
+  }
+  .msg.user .msg-bubble {
+    background: rgba(0,212,232,.08);
+    border: 1px solid rgba(0,212,232,.2);
+    align-self: flex-end;
+    color: #d0eef4;
+  }
+  .msg.ai .msg-bubble {
+    background: rgba(232,160,32,.06);
+    border: 1px solid rgba(232,160,32,.18);
+    align-self: flex-start;
+    color: var(--text);
+  }
+  /* AI message formatting */
+  .msg.ai .msg-bubble h3 {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--amber-glow);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    margin-top: 10px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--amber-dim);
+  }
+  .msg.ai .msg-bubble h3:first-child { margin-top: 0; }
+  .msg.ai .msg-bubble ul {
+    padding-left: 14px;
+    margin: 6px 0;
+  }
+  .msg.ai .msg-bubble li {
+    margin-bottom: 4px;
+    color: #b0c4d4;
+  }
+  .msg.ai .msg-bubble li::marker { color: var(--amber); }
+  .msg.ai .msg-bubble strong {
+    color: var(--amber-glow);
+    font-weight: 600;
+  }
+  .msg.ai .msg-bubble code {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: rgba(0,0,0,.3);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--cyan);
+  }
+  .msg.ai .msg-bubble p { margin-bottom: 6px; }
+  .msg.ai .msg-bubble p:last-child { margin-bottom: 0; }
+
+  /* ── TYPING INDICATOR ── */
+  .typing {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    padding: 10px 12px;
+    background: rgba(232,160,32,.06);
+    border: 1px solid rgba(232,160,32,.18);
+    border-radius: 4px;
+    width: fit-content;
+  }
+  .typing span {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--amber);
+    animation: bounce .9s ease-in-out infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce {
+    0%,60%,100% { transform: translateY(0); opacity:.5; }
+    30%          { transform: translateY(-5px); opacity:1; }
+  }
+
+  /* ── QUICK FAULTS ── */
+  .quick-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 0 4px;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .quick-chips {
+    flex-shrink: 0;
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .quick-chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 5px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s;
+    letter-spacing: .5px;
+  }
+  .chip:active, .chip:hover {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: rgba(232,160,32,.08);
+  }
+
+  /* ── INPUT BAR ── */
+  .input-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px 12px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  #userInput {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 17px;
+    padding: 10px 12px;
+    resize: none;
+    min-height: 42px;
+    max-height: 100px;
+    outline: none;
+    transition: border-color .2s;
+    -webkit-appearance: none;
+  }
+  #userInput::placeholder { color: var(--text-dim); }
+  #userInput:focus { border-color: var(--amber-dim); }
+
+  #sendBtn {
+    width: 42px; height: 42px;
+    background: var(--amber);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #sendBtn:active { transform: scale(.93); background: var(--amber-glow); }
+  #sendBtn:disabled { background: var(--amber-dim); opacity:.5; cursor: not-allowed; }
+  #sendBtn svg { width:18px; height:18px; fill: #000; }
+
+  /* ── WELCOME CARD ── */
+  .welcome {
+    background: rgba(232,160,32,.05);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    margin-bottom: 4px;
+  }
+  .welcome-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--amber);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .welcome p {
+    font-size: 15px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* ── SYSTEM SELECT MODAL ── */
+  .sys-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .sys-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px 8px 0 0;
+    width: 100%; max-width: 430px;
+    padding: 20px 16px 36px;
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .modal-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--amber);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .modal-opt {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .modal-opt:active { border-color: var(--amber); background: rgba(232,160,32,.08); }
+  .modal-opt-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .modal-opt-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+  .modal-cancel {
+    margin-top: 12px;
+    width: 100%;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-family: var(--sans);
+    font-size: 16px;
+    padding: 10px;
+    cursor: pointer;
+  }
+
+  /* ── TUTORIAL BUTTON ── */
+  .help-btn {
+    position: absolute;
+    top: 10px; right: 38px;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--amber-dim);
+    background: none;
+    color: var(--amber);
+    font-family: var(--mono);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .help-btn:active { background: rgba(232,160,32,.15); border-color: var(--amber); }
+
+  /* ── TUTORIAL MODAL ── */
+  .tut-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.85);
+    backdrop-filter: blur(6px);
+    z-index: 200;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: fadein .2s ease;
+  }
+  .tut-backdrop.hidden { display: none; }
+  @keyframes fadein { from { opacity:0; } to { opacity:1; } }
+
+  .tut-sheet {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--amber);
+    border-radius: 16px 16px 0 0;
+    width: 100%; max-width: 430px;
+    padding: 0 0 36px;
+    animation: slideUp .3s cubic-bezier(.22,1,.36,1);
+    overflow: hidden;
+    max-height: 90dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tut-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tut-title {
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--amber-glow);
+    letter-spacing: .5px;
+  }
+  .tut-close {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 30px; height: 30px;
+    color: var(--text-dim);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tut-body {
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .tut-intro {
+    font-size: 17px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .tut-intro strong { color: var(--amber-glow); }
+
+  .tut-step {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .tut-num {
+    flex-shrink: 0;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: rgba(232,160,32,.12);
+    border: 1.5px solid var(--amber-dim);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--amber);
+  }
+  .tut-step-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .tut-step-desc {
+    font-size: 16px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+  .tut-step-desc strong { color: var(--amber); font-weight: 700; }
+
+  .tut-tip {
+    background: rgba(0,212,232,.06);
+    border: 1px solid rgba(0,212,232,.2);
+    border-radius: 6px;
+    padding: 12px 14px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .tut-tip-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+  .tut-tip-text {
+    font-size: 15px;
+    color: var(--cyan);
+    line-height: 1.5;
+  }
+
+  .tut-got-it {
+    margin: 0 20px;
+    flex-shrink: 0;
+    background: var(--amber);
+    border: none;
+    border-radius: 6px;
+    color: #000;
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 700;
+    padding: 14px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .15s;
+  }
+  .tut-got-it:active { background: var(--amber-glow); }
+
+  /* ── STATUS PICK BUTTONS ── */
+  .status-pick-btn {
+    flex: 1;
+    border: none;
+    border-radius: 4px;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 700;
+    padding: 10px 6px;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .status-pick-btn:active { opacity:.75; transform: scale(.96); }
+  .status-pick-btn.ok   { background: rgba(32,200,112,.15); color: var(--green);      border: 1.5px solid var(--green); }
+  .status-pick-btn.warn { background: rgba(232,160,32,.15); color: var(--amber-glow); border: 1.5px solid var(--amber); }
+  .status-pick-btn.fail { background: rgba(232,48,48,.15);  color: var(--red);        border: 1.5px solid var(--red); }
+</style>
+</head>
+<body>
+
+  <!-- TUTORIAL MODAL -->
+  <div class="tut-backdrop" id="tutBackdrop">
+    <div class="tut-sheet">
+      <div class="tut-header">
+        <div class="tut-title">How to Use This App 👋</div>
+        <button class="tut-close" onclick="closeTutorial()">✕</button>
+      </div>
+      <div class="tut-body">
+        <div class="tut-intro">
+          This app is like having a super-smart aircraft mechanic in your pocket. You tell it what is wrong with the plane's fuel system, and it tells you how to fix it. <strong>No experience needed to get started!</strong>
+        </div>
+        <div class="tut-step">
+          <div class="tut-num">1</div>
+          <div>
+            <div class="tut-step-title">Check the Status Bar 🟡</div>
+            <div class="tut-step-desc">The row of numbers near the top shows the health of each part of the fuel system. <strong>Green = everything is fine</strong>, <strong>yellow = something is off</strong>, <strong>red = there is a problem!</strong> Tap any item to instantly ask the AI about it.</div>
+          </div>
+        </div>
+        <div class="tut-step">
+          <div class="tut-num">2</div>
+          <div>
+            <div class="tut-step-title">Use the Quick Fault Shortcuts 🟠</div>
+            <div class="tut-step-desc">See the scrollable row of buttons just above the keyboard? Those are shortcuts for the most common problems. Just <strong>tap one</strong> and the AI starts helping right away!</div>
+          </div>
+        </div>
+        <div class="tut-step">
+          <div class="tut-num">3</div>
+          <div>
+            <div class="tut-step-title">Type Your Own Question ✏️</div>
+            <div class="tut-step-desc">Use the text box at the bottom to describe exactly what you see — like <strong>the fuel gauge is showing dashes</strong> or <strong>probe 3 keeps failing.</strong> The more detail you give, the better the answer.</div>
+          </div>
+        </div>
+        <div class="tut-step">
+          <div class="tut-num">4</div>
+          <div>
+            <div class="tut-step-title">Keep the Conversation Going 💬</div>
+            <div class="tut-step-desc">The AI remembers everything in the session. Ask follow-ups like <strong>where exactly is that connector?</strong> or <strong>what tools do I need?</strong> — just like texting a knowledgeable friend.</div>
+          </div>
+        </div>
+        <div class="tut-tip">
+          <div class="tut-tip-icon">💡</div>
+          <div class="tut-tip-text"><strong>Good to know:</strong> This app has the full G550 fuel system Maintenance Manual (ATA 28) built in. It knows exact part locations, wire numbers, circuit breaker labels, and what every cockpit warning light means.</div>
+        </div>
+      </div>
+      <button class="tut-got-it" onclick="closeTutorial()">Got it — Lets Go!</button>
+    </div>
+  </div>
+
+<div id="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-top">
+      <span class="acft-tag">G550 · ATA 28</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="help-btn" onclick="openTutorial()">?</button>
+        <div class="status-dot" id="connDot"></div>
+      </div>
+    </div>
+    <h1>⬡ FUEL SYS TROUBLESHOOTER</h1>
+    <div class="header-sub">
+      <span class="badge live">AI ASSIST ONLINE</span>
+      <span class="badge">MM REV JAN 31/26</span>
+      <span class="badge">ATA 28-00/41/43</span>
+    </div>
+  </header>
+
+  <!-- SYSTEM STATUS BAR (rendered by JS) -->
+  <div class="status-bar" id="statusBar"></div>
+
+  <!-- STATUS EDIT MODAL -->
+  <div class="tut-backdrop hidden" id="statusEditBackdrop" onclick="closeStatusEdit(event)">
+    <div class="tut-sheet" style="padding:0 0 32px;" onclick="event.stopPropagation()">
+      <div class="tut-header">
+        <div class="tut-title" id="editModalTitle">Edit Status</div>
+        <button class="tut-close" onclick="closeStatusEdit()">✕</button>
+      </div>
+      <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
+        <div style="font-size: 15px;color:var(--text-dim);font-family:var(--mono);letter-spacing:1px;margin-bottom:2px;">SET STATUS</div>
+        <div style="display:flex;gap:8px;">
+          <button class="status-pick-btn ok"  onclick="applyStatus('ok')" >✔ OK / NORM</button>
+          <button class="status-pick-btn warn" onclick="applyStatus('warn')">⚠ WARN</button>
+          <button class="status-pick-btn fail" onclick="applyStatus('fail')">✖ FAIL</button>
+        </div>
+        <div style="font-size: 15px;color:var(--text-dim);font-family:var(--mono);letter-spacing:1px;margin-top:6px;">CUSTOM VALUE <span style="color:var(--text-dim);font-size: 12px;">(optional)</span></div>
+        <input id="customValInput" type="text" placeholder="e.g. 17/19 or FAULT"
+          style="background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size: 16px;padding:10px 12px;outline:none;width:100%;" />
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button onclick="applyStatusWithValue()" style="flex:1;background:var(--amber);border:none;border-radius:4px;color:#000;font-family:var(--sans);font-weight:700;font-size: 17px;padding:12px;cursor:pointer;">Apply</button>
+          <button onclick="resetOneSystem()" style="flex:1;background:none;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);font-family:var(--sans);font-size: 17px;padding:12px;cursor:pointer;">Reset Default</button>
+        </div>
+        <button onclick="resetAllSystems()" style="width:100%;background:none;border:1px solid var(--red);border-radius:4px;color:var(--red);font-family:var(--sans);font-size: 16px;padding:10px;cursor:pointer;margin-top:2px;">Reset ALL Systems to Default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat">
+    <div class="welcome">
+      <div class="welcome-title">// SYSTEM READY</div>
+      <p>G550 Fuel System diagnostic assistant. Describe any fault, CAS message, or observed symptom. Use the quick-fault chips below or tap a system in the status bar above.</p>
+    </div>
+  </div>
+
+  <!-- QUICK FAULT CHIPS -->
+  <div class="quick-chips">
+    <span class="quick-label">FAULTS →</span>
+    <div class="chip" onclick="sendChip('R FQSC Channel Fail CAS message')">R FQSC CHAN FAIL</div>
+    <div class="chip" onclick="sendChip('Fuel quantity indication showing amber dashes on EICAS')">QTY AMBER DASH</div>
+    <div class="chip" onclick="sendChip('Probes 2, 3, 4, 5 intermittent failure right wing')">R PROBES 2-5 INT</div>
+    <div class="chip" onclick="sendChip('L-R Fuel Level Low CAS message illuminated')">FUEL LEVEL LOW</div>
+    <div class="chip" onclick="sendChip('FQMS Maintenance Required CAS message')">FQMS MAINT REQ</div>
+    <div class="chip" onclick="sendChip('Fuel imbalance greater than 1000 pounds between wings')">FUEL IMBALANCE</div>
+    <div class="chip" onclick="sendChip('Boost pump pressure low CAS message')">BOOST PMP LOW</div>
+    <div class="chip" onclick="sendChip('How do I run the fuel quantity system BIT test?')">RUN BIT TEST</div>
+    <div class="chip" onclick="sendChip('Microbiological contamination detected in fuel tank')">MICRO CONTAM</div>
+    <div class="chip" onclick="sendChip('Fuel tank temperature CAS message red')">FUEL TEMP FAULT</div>
+  </div>
+
+  <!-- INPUT BAR -->
+  <div class="input-bar">
+    <textarea id="userInput" placeholder="Describe symptom or fault…" rows="1"></textarea>
+    <button id="sendBtn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+      </svg>
+    </button>
+  </div>
+
+</div>
+
+<script>
+// ── SYSTEM KNOWLEDGE BASE (G550 ATA 28) ──
+const SYSTEM_PROMPT = `You are an expert G550 aircraft maintenance technician and fuel systems specialist providing real-time hangar-floor troubleshooting support. Your knowledge is drawn from both the Gulfstream G550 ATA 28 Maintenance Manual (MM) and the FlightSafety G500/G550 Maintenance Training Manual (MTM), Chapter 28.
+
+=== GENERAL SYSTEM OVERVIEW ===
+- Two integral (wet wing) fuel tanks; total capacity 41,300 lbs / 6,118 US gal
+- Fuel powers two Rolls-Royce Deutschland BR710 turbofan engines and the APU
+- Each wing tank divided into 7 compartments by 6 baffle ribs
+- Baffle ribs located at: BL 62.9, RBS 135, RBS 214.5, RBS 294, RBS 373.5, RBS 453
+- 21 wing access panels per tank in lower wing skin for inspection/maintenance
+- Three to five flapper-type check valves at base of each rib — prevent outboard flow, allow inboard gravity drain
+- Weep holes at bottom of ribs prevent water/fuel entrapment; small openings at top allow pressure fueling flow between compartments
+
+=== FUEL HOPPER ===
+- One per wing; isolated compartment formed by rear spar, centerline rib (BL 0.0), baffle rib at BL 62.9, and forward wall 43.5 inches fwd of rear spar
+- Capacity: 190 US gal per hopper
+- Components inside: boost pump inlet filter screen and manifold, ejector pumps, crossflow SOV (left), hydraulic fluid heat exchanger, intertank valve (right), densitometer (left hopper only), low-level sensor, fuel tank temperature probe, compensators, fuel quantity probes, water/fuel drain valve
+- 2 hopper access panels in forward wall for inspection/repair
+- 4 fueling check valves on hopper forward wall allow inboard gravity flow into hopper
+
+=== FUEL STORAGE SYSTEM OPERATION ===
+- Gravity fueling: fuel flows inboard to center (lowest point due to 3° wing dihedral), then outboard filling tank; vent ducts release air during fill
+- Overpressurization: 3-inch and 1-inch vent float pressure-relief valves open; fuel flows to vent plenum then overboard
+- During flight, baffle ribs restrict fuel movement through turns/banks; vent float valve opens/closes as needed
+
+=== GRAVITY FUELING ===
+- Two overwing gravity fueling ports just outboard of RBS 479.5 on top of wing
+- Each port: 3-inch diameter filler cap, adapter with filter screen — prevents nozzle over-insertion and FOD entry
+- Refuel safety grounding jack in wing leading edge near each gravity adapter
+- Must be done on level ground; uneven surface causes fuel imbalance
+
+=== WATER AND FUEL DRAINAGE ===
+- Drain valves flush-mounted to lower wing skins
+- SNs 5001-5034: 2 valves fwd of main gear well (1 fwd of hopper, 1 drains hopper) + 1 near wingtip (drains vent plenum)
+- SNs 5035+: 3 drains fwd of main wheel well (2 drain tank fwd of hopper, 1 drains hopper)
+- Valve type 79C3T2: open with Phillips screwdriver — push all the way in, rotate 90° CCW, release; close by pushing in, rotating 90° CW
+- Valve type 79C20E/79C20H: use 1/8-inch hex drive
+- O-ring can be replaced with tanks fueled via secondary valve seat — push stem in 1/32", rotate CW to stop, release; stem drops, secondary seat blocks fuel
+- Routine sump draining: minimum 1 qt per valve; 4 hours settling time after fueling before draining
+
+=== FUEL VENTILATION SYSTEM ===
+- Components: forward and aft vent ducts (attached to inner top of each tank), outboard vent plenum, overboard vent and ram-air inlet, outboard vent valves, inboard vent valves, vent drain valves
+- Vent plenum: isolated compartment at outboard upper end of each wing (RBS 506.36 to WS 520.36); provides 2% FAA-required expansion space
+- Overboard vent and ram-air inlet: bottom of each wing just outboard of RBS 453.0; connects directly to vent plenum
+- 3-inch vent float valve: inboard upper fwd section — allows tank venting at max fuel supply to engines
+- 1-inch vent float valve: auxiliary; helps venting during takeoff and climb
+- Both valves also act as pressure-relief — open when tank overpressure occurs
+- Vent drain valves (3 per wing): 2 on bottom of fwd/aft vent ducts between RBS 161.5 and RBS 188.0; 1 at lowest vent point (Y-pipe ~BL 12.0) — drain fuel back into tank; provide some venting when fuel level is below valves
+
+=== HEATED FUEL RETURN SYSTEM (HFRS) ===
+- Purpose: return warm engine fuel to wing tanks to decrease fuel viscosity in cold-soaked tanks at high altitude
+- Heated fuel control valve: solenoid-controlled, 2-position, 3-port; located between spill diverter in FMU and FCOC inlet; controlled by FADEC based on hopper temperature
+- Opens at ~0°C, closes at ~10°C; returned fuel temperature ~50°C
+- Backup heated fuel return valve (BHFRSOV): in forward section of each engine pylon; cockpit switch labeled FUEL RETURN (AUTO/OFF); ARM opens valve; prevents fuel return during takeoff/landing (negative-g risk)
+- CAS: L-R Fuel Return Fail if fault detected; EEC de-energizes solenoid (closes valve) on fault
+- FADEC compares fuel temps channel A vs B; >10°C difference or transmission error → Maintenance Required CAS + system shutoff
+
+=== PRESSURE FUELING AND DEFUELING ===
+- Single-point pressure fueling adapter; fueling pressure 35-55 psi
+- Defueling methods:
+  1. Suction through pressure fueling adapter (leaves ~11 gal; drain remainder via wing drain valves)
+  2. Suction via engine fuel line drain valve in wheel well (each side separately)
+  3. Boost pump method — connect hose to drain valve, open valve BEFORE turning on pumps; turn pumps OFF before closing valve (O-ring rupture risk if out of sequence)
+
+=== PRESSURE FUELING SHUTOFF SYSTEM ===
+- Pressure-fueling SOV: one per wing at baffle rib BL 62.9; controlled by high-level pilot valves, sensing valve, precheck valves, or solenoid SOV
+- Pressure-fueling sensing valve: at structural rib BL 90.0; senses tank vs ambient pressure; if vent system blocked, closes SOV — AMBIENT VENT OPENING ON WING UNDERSKIN MUST STAY CLEAR (commonly missed)
+- High-level pilot valves: inboard and outboard per wing; outboard near gravity fueling adapter at RBS 479.5; both must close to stop fueling; allows any ramp attitude fueling
+- Remote fueling solenoid SOVs: 2 on front spar of right wing; energized by REMOTE FUELING L/R SHUTOFF switches on COP or auto from FQSC; only functions when aircraft has power
+- Manual precheck valves: 2 three-position valves on pressure fueling adapter; PRESS position checks pressure-sensing valve; FLOAT position checks high-level pilot valve floats
+- Emergency vent: if both SOVs fail, tank pressure forces vent float relief valves open; fuel flows to vent plenum then overboard
+- Automatic refueling mode: FQSC signals solenoid SOV to close when preselected quantity reached
+
+=== FUEL CROSSFLOW AND INTERTANK TRANSFER ===
+- Crossflow valve: motor-driven butterfly valve on rear wall of LEFT hopper; enables fuel feed from one pump manifold to the other; motor in wheel well, valve in hopper; CAS: Fuel Crossflow Open (BLUE); synoptic shows arrow for flow direction and green valve
+- Intertank valve: motor-driven butterfly valve on rear wall of RIGHT hopper; allows left and right hoppers to combine fuel; CAS: Fuel Intertank Open (BLUE); synoptic shows green valve
+- Both controlled by guarded switches in FUEL section of COP; powered by left essential 28VDC bus
+
+=== ENGINE AND APU FUEL DISTRIBUTION ===
+BOOST PUMPS:
+- 4 total (2 per wing): left main (inboard), left alternate (outboard), right main (inboard), right alternate (outboard)
+- Mounted in pairs on rear spar (rear wall of each hopper) in main wheel well area
+- Plug-in type; suction and discharge ports penetrate rear beam into fuel pump manifold
+- Each pump: pressure switch, vapor separator, shaft seal drain; AC motor (DC power supplied, internal inverter converts to AC)
+- Main boost pumps powered by ESSENTIAL DC bus; alternate boost pumps powered by MAIN DC bus
+- Pressure switch actuates at 16 ±2 psig (on); fault signal when pressure drops below 9 ±1.5 psig
+- Pressure switches also provide maintenance advisory when stuck in pressurized state (monitored via CMC on ARINC 429)
+- IMPORTANT: A faulty EMI filter causes inoperative boost pump — DO NOT replace pump until EMI filter confirmed good
+
+EMI FILTERS:
+- 2 per wheel well (one for left pumps, one for right pumps)
+- Failure mode: associated boost pump inoperative
+
+FUEL BOOST PUMP MANIFOLDS:
+- 2 per wing; each receives one pair of boost pumps
+- 3 chambers each: 1 pressure chamber (common discharge), 2 suction chambers
+- Spring-loaded check valves allow pump removal/installation without defueling
+- Suction bypass check valve: if both pumps stop, engine can siphon fuel through bypass line
+
+EJECTOR PUMPS:
+- 2 per hopper; low-pressure high-volume jet pumps; mounted on forward wall of each hopper
+- Maintain full fuel level in hoppers at all times; run on motive flow from boost pump
+- Transfer rate 4,550 pph (exceeds engine demand at max cruise); excess fuel spills back into tank via slot at top of forward hopper wall
+- Protected by inlet screen; internal flapper check valves
+- Motive flow from LEFT manifold supplies APU fuel
+
+ENGINE FUEL SHUTOFF VALVES:
+- Located between each pair of boost pumps; mounted to rear spar in main gear wheel well
+- Normally OPEN; gate valves operated by DC motor with internal EMI filter
+- Manual operation lever for maintenance
+- Motor replaceable without defueling
+- Closed by: COP switch or FIRE handle; closure sends ground signal to MAU (L: MAU1 DGIO1; R: MAU2 DFIO2) → CAS: L/R Fuel Shutoff Valve Closed
+
+APU FUEL SHUTOFF VALVE:
+- Located inboard of left boost pumps, mounted to rear spar in left main gear well
+- Normally ENERGIZED OPEN; solenoid-operated
+- Controlled by APU CONTROL MASTER switch on COP; also closed by APU fire detection
+
+=== FUEL INDICATION SYSTEM ===
+SIGNAL CONDITIONER (FQSC):
+- Located in Left Electronics Equipment Rack (LEER), behind CB panel
+- Provides independent left and right fuel quantity processing
+- Two processors contained in one unit
+- Outputs to: EICAS/CAS (via MAUs on ARINC 429), ground service control panel, MCDU
+- Extensive BIT: power-up, continuous background, on-demand modes
+- Checks: fuel probes, level sensors, compensators, densitometer, signal conditioner, GSCP
+- No calibration required after probe or component replacement
+
+FUEL QUANTITY PROBES:
+- 19 capacitance-type probes per wing; numbered inboard to outboard
+- Capacitance increases when tanks are full (fuel has higher dielectric constant than air/vapor)
+- Lo-Z (capacitive signal) wires route through wing front spar feedthrough connector
+- Hi-Z (reference) signals: 5V triangular wave 1000Hz coaxial cables from FQSC; routed along main probe harness to coaxial connectors on front wing spar adjacent to Lo-Z connector
+- CRITICAL SHIELD NOTE: FQSC uses single-point shield reference. At NO TIME should Hi-Z coax shield connect to airframe ground, nor Hi-Z shield to center conductor, nor Lo-Z to Hi-Z low resistance — this causes erratic multi-probe readings
+- Probes grouped by cell, spliced in short harnesses running from wing front spar to fuselage pressure bulkhead connector
+
+COMPENSATORS:
+- 3 total: one in each hopper (part of probe No.1), one in right wing tank (part of probe No.9R)
+- Measure fuel dielectric constant during refueling
+
+DENSITOMETERS:
+- 2 total: one in left hopper (measures density of existing fuel), one in right wing tank at RBS 214 (measures density of fuel being loaded — accounts for temperature stratification during refueling)
+- Bonded to airframe via braided strap; signal via 2 twisted shielded wires through front spar connector Pin 18
+
+HIGH-LEVEL SENSORS:
+- 2 per wing: one inboard (forward of hopper — NOT used by FQSC for high-level determination), one outboard in vent plenum at RBS 506 (used by FQSC; input passes through "dummy probe" in cell No.1)
+- High-level condition = outboard sensor wet with fuel
+- High-level warning light on pressure fueling access door illuminates; automatic fueling cannot initiate if high-level exists
+
+LOW-LEVEL SENSORS:
+- 2 per aircraft (one per hopper)
+- Warning threshold: 650 lbs / 96 gallons in hopper
+- CAS: L-R Fuel Level Low (AMBER)
+
+=== GROUND SERVICE CONTROL PANEL (GSCP) ===
+- Located on forward side of left EER; 3 amber 8-character dot-matrix LED displays
+- Upper: left tank quantity + left high-level warning; Middle: right tank quantity + right high-level warning; Lower: preselected quantity + fuel imbalance
+- TEST/RESET switch: hold 2 sec = display test pattern; hold 5 sec = fault code summary; toggle to scroll faults
+- Fault display: upper = LRU nomenclature, middle = error nomenclature, lower = status (active/not) + occurrence count
+- After last fault: CLEAR appears for 5 sec; hold TEST/RESET 5 sec to clear all faults → shows CLEARING then CLEARED
+- Max 10 faults per side stored; oldest dropped when exceeded; 2-minute timeout exits fault display mode
+- INCR/DECR switch: spring-loaded momentary; updates preselect in 100/200/500 lb increments; max preselect 50,000 lbs
+- If GSCP does not receive data from FQSC for >15 seconds: all displays show dashes
+- Auto refuel mode: switch must go to OFF then back to AUTO REFUEL to initiate (default on power-up is manual)
+- 500 lb imbalance during refueling: FQSC closes high-side fueling valve until sides equalize; 1000 lb imbalance → PRESEL flashes WARN then IMBAL
+
+=== FUEL INDICATION DISPLAYS ===
+- Fuel synoptic page: fuel flow, quantity, tank temp, boost pumps, intertank valve position, crossflow valve position, engine fuel SOV position, engine fuel temp, fuel imbalance, HFRS
+- CAS summary page: fuel quantity and tank temperature
+- MCDU: backup fuel quantity display; also shows fuel flow
+- Engine instruments display: quantity, fuel flow, tank temperature
+- FUEL TEST switch (overhead panel): press → displays 14,000 lbs total, 7,000 lbs per side (amber), L-R Fuel Level Low CAS (amber)
+
+=== CAS MESSAGES (COMPLETE LIST) ===
+- L-R Fuel Pressure Low (RED): boost pump pressure below threshold; switch actuates at 16±2 psig ON, 9±1.5 psig OFF/fault
+- Fuel Tank Temperature (RED): ≤-37°C or ≥+54°C; (AMBER): >-37°C to -35°C
+- L-R Fuel Level Low (AMBER): hopper below 650 lbs / 96 gal
+- FQMS Maintenance Required (BLUE): fuel quantity measurement system fault
+- L-R FQSC Channel Fail (BLUE): FQSC internal fault
+- Fuel Imbalance (BLUE): >1000 lb difference between tanks
+- Fuel Intertank Open (BLUE): intertank valve open
+- Fuel Crossflow Open (BLUE): crossflow valve open
+- L-R Fuel Shutoff Valve Closed (advisory): engine fuel SOV closed
+- L-R Fuel Return Fail: HFRS fault
+
+=== CIRCUIT BREAKERS ===
+REER panel, FUEL section:
+- L FUEL QTY (AIR) — L emergency DC bus
+- R FUEL QTY (AIR) — R emergency DC bus
+- L FUEL QTY (GND) — ground service bus
+- R FUEL QTY (GND) — ground service bus
+Power source: ground service bus on ground; emergency DC bus in air
+
+=== TROUBLESHOOTING GUIDANCE ===
+
+MULTIPLE ADJACENT PROBE FAILURES (intermittent):
+1. Shared wiring harness splice/connector — probes grouped by cell; one bad splice/connector hits all probes in group
+2. Wing front spar feedthrough connector (Lo-Z circular) — inspect for corrosion, bent pins, moisture intrusion
+3. Hi-Z coaxial cable shield grounding — shield contact with airframe structure causes intermittent multi-probe faults; trace full coax routing in affected wing section
+4. FQSC right channel — check for R FQSC Channel Fail or FQMS Maintenance Required CAS; pull on-demand BIT
+5. Circuit breakers — check R FUEL QTY (AIR) and (GND) on REER panel for proper seating
+6. Densitometer or compensator fault — can cause FQSC to reject entire channel
+
+AMBER DASHES ON FUEL QUANTITY DISPLAY:
+- FQSC has set NCD (No Computed Data) bit on ARINC 429 output
+- FQSC rejected the signal as unreasonable or lost signal entirely
+- Check GSCP for fault codes; pull on-demand BIT; trace to probe/harness/connector/FQSC channel
+
+BOOST PUMP INOPERATIVE:
+- Check EMI filter FIRST before replacing pump
+- Check boost pump pressure switch for stuck-pressurized maintenance advisory
+- Check associated CB on overhead panel
+
+FQMS MAINTENANCE REQUIRED:
+- FQSC BIT detected fault in: probe signals, densitometer, compensator, level sensor, or FQSC processing
+- Go to GSCP: hold TEST/RESET 5 sec to read fault codes; scroll through faults
+- If paired with R/L FQSC Channel Fail → FQSC unit likely faulty
+
+RESPONSE FORMAT:
+- Respond as a knowledgeable A&P/IA technician on the hangar floor
+- Be specific: cite probe numbers, BL/RBS stations, component names, CB panel locations, valve positions
+- Lead with most likely cause, then secondary checks in priority order
+- Keep responses concise and actionable
+- Use UPPERCASE for component names and system designations
+- Always state CAS message color when referencing CAS alerts
+- When relevant, cite MTM figure numbers (e.g., Figure 28-35 for fuel quantity block diagram)`;
+
+// ── TUTORIAL ──
+function openTutorial() {
+  document.getElementById('tutBackdrop').classList.remove('hidden');
+}
+function closeTutorial() {
+  document.getElementById('tutBackdrop').classList.add('hidden');
+}
+// Show tutorial on first visit
+if (!sessionStorage.getItem('tutSeen')) {
+  sessionStorage.setItem('tutSeen', '1');
+  // slight delay so app renders first
+  setTimeout(openTutorial, 400);
+}
+
+// ── SYSTEM DEFINITIONS ──
+const SYSTEM_DEFAULTS = [
+  { id: 'FQSC',   label: 'FQSC',      value: 'OK',    status: 'ok'  },
+  { id: 'L-WING', label: 'L PROBES',  value: '19/19', status: 'ok'  },
+  { id: 'R-WING', label: 'R PROBES',  value: '19/19', status: 'ok'  },
+  { id: 'BOOST',  label: 'BOOST PMP', value: '4/4',   status: 'ok'  },
+  { id: 'XFLOW',  label: 'XFLOW VLV', value: 'NML',   status: 'ok'  },
+  { id: 'APU',    label: 'APU FUEL',  value: 'NML',   status: 'ok'  },
+];
+
+let systemStates = JSON.parse(sessionStorage.getItem('sysStates') || 'null')
+  || SYSTEM_DEFAULTS.map(s => ({ ...s }));
+
+function saveSystemStates() {
+  sessionStorage.setItem('sysStates', JSON.stringify(systemStates));
+}
+
+function renderStatusBar() {
+  const bar = document.getElementById('statusBar');
+  bar.innerHTML = '';
+  systemStates.forEach(sys => {
+    const div = document.createElement('div');
+    div.className = 'sys-item' + (selectedSystem === sys.id ? ' active' : '');
+    div.innerHTML = `<div class="sys-label">${sys.label}</div>
+      <div class="sys-value ${sys.status}">${sys.value}</div>`;
+    div.addEventListener('click', () => selectSystem(sys.id, div));
+    div.addEventListener('long-press', () => openStatusEdit(sys.id));
+    // Long-press support for mobile
+    let pressTimer;
+    div.addEventListener('touchstart', () => { pressTimer = setTimeout(() => openStatusEdit(sys.id), 500); }, { passive: true });
+    div.addEventListener('touchend', () => clearTimeout(pressTimer));
+    div.addEventListener('touchmove', () => clearTimeout(pressTimer));
+    bar.appendChild(div);
+  });
+}
+
+// ── STATUS EDIT MODAL ──
+let editingSystemId = null;
+
+function openStatusEdit(sysId) {
+  editingSystemId = sysId;
+  const sys = systemStates.find(s => s.id === sysId);
+  document.getElementById('editModalTitle').textContent = 'Edit: ' + sys.label;
+  document.getElementById('customValInput').value = sys.value;
+  document.getElementById('statusEditBackdrop').classList.remove('hidden');
+}
+
+function closeStatusEdit(e) {
+  if (e && e.target !== document.getElementById('statusEditBackdrop')) return;
+  document.getElementById('statusEditBackdrop').classList.add('hidden');
+  editingSystemId = null;
+}
+
+function applyStatus(newStatus) {
+  if (!editingSystemId) return;
+  const sys = systemStates.find(s => s.id === editingSystemId);
+  sys.status = newStatus;
+  // Auto-set sensible default values if no custom input
+  const customVal = document.getElementById('customValInput').value.trim();
+  if (!customVal || customVal === sys.value) {
+    const defaults = { ok: getDefaultValue(sys.id), warn: getDefaultValue(sys.id), fail: 'FAULT' };
+    if (newStatus === 'ok') sys.value = getDefaultValue(sys.id);
+    else if (newStatus === 'fail') sys.value = 'FAULT';
+  }
+  saveSystemStates();
+  renderStatusBar();
+  document.getElementById('statusEditBackdrop').classList.add('hidden');
+  editingSystemId = null;
+}
+
+function applyStatusWithValue() {
+  if (!editingSystemId) return;
+  const sys = systemStates.find(s => s.id === editingSystemId);
+  const customVal = document.getElementById('customValInput').value.trim();
+  if (customVal) sys.value = customVal;
+  saveSystemStates();
+  renderStatusBar();
+  document.getElementById('statusEditBackdrop').classList.add('hidden');
+  editingSystemId = null;
+}
+
+function resetOneSystem() {
+  if (!editingSystemId) return;
+  const def = SYSTEM_DEFAULTS.find(s => s.id === editingSystemId);
+  const sys = systemStates.find(s => s.id === editingSystemId);
+  sys.value = def.value;
+  sys.status = def.status;
+  saveSystemStates();
+  renderStatusBar();
+  document.getElementById('statusEditBackdrop').classList.add('hidden');
+  editingSystemId = null;
+}
+
+function resetAllSystems() {
+  systemStates = SYSTEM_DEFAULTS.map(s => ({ ...s }));
+  saveSystemStates();
+  renderStatusBar();
+  document.getElementById('statusEditBackdrop').classList.add('hidden');
+  editingSystemId = null;
+}
+
+function getDefaultValue(sysId) {
+  return (SYSTEM_DEFAULTS.find(s => s.id === sysId) || {}).value || 'NML';
+}
+
+// ── STATE ──
+let messages = [];
+let isLoading = false;
+let selectedSystem = 'FQSC';
+
+// ── AUTO-RESIZE TEXTAREA ──
+const textarea = document.getElementById('userInput');
+textarea.addEventListener('input', () => {
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+});
+textarea.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ── SELECT SYSTEM FROM STATUS BAR ──
+function selectSystem(sysId, clickedEl) {
+  const sys = systemStates.find(s => s.id === sysId);
+  // If already selected, open edit modal instead
+  if (selectedSystem === sysId) {
+    openStatusEdit(sysId);
+    return;
+  }
+  selectedSystem = sysId;
+  renderStatusBar();
+  const prompts = {
+    'FQSC':   'Explain the FQSC Built-In-Test modes and how to run an on-demand BIT check for the right channel.',
+    'L-WING': 'What is the wiring architecture for the left wing fuel probes and where are the key inspection points?',
+    'R-WING': 'What are the most likely causes of intermittent right wing probe failures, and what should I inspect first?',
+    'BOOST':  'Walk me through troubleshooting a right boost pump that is intermittently triggering R Fuel Pressure Low.',
+    'XFLOW':  'Describe the crossflow shutoff valve operation and how to check it for faults.',
+    'APU':    'What are the common fuel system faults that affect APU fuel supply on the G550?',
+  };
+  if (prompts[sysId]) sendChip(prompts[sysId]);
+}
+
+// ── SEND CHIP ──
+function sendChip(text) {
+  document.getElementById('userInput').value = text;
+  sendMessage();
+}
+
+// ── ADD MESSAGE TO DOM ──
+function addMessage(role, content) {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const roleLabel = role === 'user' ? '// TECHNICIAN INPUT' : '// FUEL SYS AI';
+  div.innerHTML = `
+    <div class="msg-role">${roleLabel}</div>
+    <div class="msg-bubble">${role === 'ai' ? formatAI(content) : escapeHtml(content)}</div>
+  `;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+// ── FORMAT AI RESPONSE ──
+function formatAI(text) {
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,  '<h3>$1</h3>')
+    .replace(/^# (.+)$/gm,   '<h3>$1</h3>')
+    .replace(/^\* (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm,  '<li>$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<[hul])(.+)$/gm, m => m ? `<p>${m}</p>` : '')
+    .replace(/<p><\/p>/g, '');
+}
+
+function escapeHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── TYPING INDICATOR ──
+function showTyping() {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'msg ai';
+  div.id = 'typingMsg';
+  div.innerHTML = `
+    <div class="msg-role">// FUEL SYS AI</div>
+    <div class="typing"><span></span><span></span><span></span></div>
+  `;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+function hideTyping() {
+  const t = document.getElementById('typingMsg');
+  if (t) t.remove();
+}
+
+// ── SEND MESSAGE ──
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if (!text || isLoading) return;
+
+  isLoading = true;
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('sendBtn').disabled = true;
+
+  addMessage('user', text);
+  messages.push({ role: 'user', content: text });
+
+  showTyping();
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM_PROMPT,
+        messages: messages
+      })
+    });
+
+    const data = await response.json();
+    hideTyping();
+
+    if (data.content && data.content[0]) {
+      const reply = data.content[0].text;
+      messages.push({ role: 'assistant', content: reply });
+      addMessage('ai', reply);
+    } else {
+      addMessage('ai', 'COMM FAULT — Unable to retrieve diagnostic data. Check connection and retry.');
+    }
+  } catch (err) {
+    hideTyping();
+    addMessage('ai', `SYSTEM ERROR — ${err.message}. Verify network connection.`);
+  }
+
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+// ── INIT ──
+renderStatusBar();
+</script>
+</body>
+</html>
